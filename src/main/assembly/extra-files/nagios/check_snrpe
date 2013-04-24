@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# Path to the check_nrpe command
+CHECK_NRPE="/usr/lib/nagios/plugins/check_nrpe"
+# Port the SNRPE service listens on
+SNRPE_PORT="4673"
+
+# DO NOT MODIFY ANYTHING BELOW THIS LINE!
+
+# Check that NRPE plugin is installed and executable
+if ! [ -x "${CHECK_NRPE}" ]; then
+  echo "NRPE plugin (${CHECK_NRPE}) could not be found or is not executable."
+  exit 3
+fi
+
+# Parse command-line parameters. Most parameters are just passed to check_nrpe,
+# however the -H parameter needs to be interpreted and the -p parameter is not
+# supported.
+declare -a args
+args=()
+hostAddress=""
+nextArgIsHost="false"
+while [ $# -gt 0 ]; do
+  if [ "${nextArgIsHost}" = "true" ]; then
+    hostAddress="${1}"
+    nextArgIsHost="false"
+  else
+    if [ x"${1}" = x"-H" ]; then
+      nextArgIsHost="true"
+    elif [ x"${1}" = x"-p" ]; then
+      echo "Error: The port command-line parameter (-p) is not supported. Please change the port in the SNRPE configuration instead."
+      exit 3
+    else
+      args=(${args[@]} "${1}")
+    fi
+  fi
+  shift;
+done
+
+# Check that the -H parameter has been specified.
+if [ x"${hostAddress}" = x ]; then
+  echo "Error: The host parameter (-H) must be specified."
+  exit 3
+fi
+
+# Utility function for removing white-space at the start and end of strings
+trimString()  {
+  local string=$1
+  string="${string#"${string%%[![:space:]]*}"}"
+  string="${string%"${string##*[![:space:]]}"}"   # remove trailing whitespace characters
+  echo -n "$string"
+}
+
+# Query SNRPE service for the port number that is forwarded to the target host
+port="`echo "${hostAddress}" | nc "${SNRPE_HOST}" "${SNRPE_PORT}"`"
+port="`trimString "${port}"`"
+if [ x"${port}" = x"" ]; then
+  echo "Error: Could not get local port for NRPE connection. Maybe the SNRPE service is not running." >&2
+  exit 2
+fi
+if [ "${port}" -lt 0 ]; then
+  echo "Error: Could not get local port for NRPE connection. Maybe the SSH tunnel could not be established." >&2
+  exit 2
+fi
+
+# Run check_nrpe and have it connect to the port forwarded through the SSH
+# tunnel
+"${CHECK_NRPE}" -H 127.0.0.1 -p "${port}" "${args[@]}"
