@@ -17,7 +17,13 @@
 package org.marsching.snrpe;
 
 import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.apache.commons.lang.Validate;
+import org.apache.commons.lang.builder.EqualsBuilder;
+import org.apache.commons.lang.builder.HashCodeBuilder;
 
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.JSchException;
@@ -33,13 +39,85 @@ import com.jcraft.jsch.Session;
  */
 public class SSHTunnelPool {
 
-    private ConcurrentHashMap<String, SSHTunnel> tunnelForHost = new ConcurrentHashMap<String, SSHTunnel>();
+    private ConcurrentHashMap<SSHSessionKey, SSHSessionInfo> tunnelForHost = new ConcurrentHashMap<SSHSessionKey, SSHSessionInfo>();
     private JSch jsch;
     private SNRPEConfiguration configuration;
 
-    private class SSHTunnel {
+    private class SSHSessionInfo {
         public Session sshSession;
-        public int localForwardedPort;
+        public Map<SSHPortForwardingKey, Integer> localPortForPortForwarding = new HashMap<SSHTunnelPool.SSHPortForwardingKey, Integer>();
+    }
+
+    private class SSHSessionKey {
+        private String user;
+        private String host;
+        private int port;
+
+        public SSHSessionKey(String host, int port, String user) {
+            super();
+            this.host = host;
+            this.port = port;
+            this.user = user;
+        }
+
+        @Override
+        public int hashCode() {
+            return new HashCodeBuilder(19, 23).append(host).append(port)
+                    .append(user).toHashCode();
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj != null && obj instanceof SSHSessionKey) {
+                SSHSessionKey other = (SSHSessionKey) obj;
+                return new EqualsBuilder().append(this.host, other.host)
+                        .append(this.port, other.port)
+                        .append(this.user, other.user).isEquals();
+            } else {
+                return false;
+            }
+        }
+
+        @Override
+        public String toString() {
+            return new StringBuilder().append(user).append("@").append(host)
+                    .append(":").append(port).toString();
+        }
+    }
+
+    private class SSHPortForwardingKey {
+        private String targetHost;
+        private int targetPort;
+
+        public SSHPortForwardingKey(String targetHost, int targetPort) {
+            super();
+            this.targetHost = targetHost;
+            this.targetPort = targetPort;
+        }
+
+        @Override
+        public int hashCode() {
+            return new HashCodeBuilder(47, 31).append(targetHost)
+                    .append(targetPort).toHashCode();
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj != null && obj instanceof SSHPortForwardingKey) {
+                SSHPortForwardingKey other = (SSHPortForwardingKey) obj;
+                return new EqualsBuilder()
+                        .append(this.targetHost, other.targetHost)
+                        .append(this.targetPort, other.targetPort).isEquals();
+            } else {
+                return false;
+            }
+        }
+
+        @Override
+        public String toString() {
+            return new StringBuilder().append(targetHost).append(":")
+                    .append(targetPort).toString();
+        }
     }
 
     /**
@@ -76,46 +154,95 @@ public class SSHTunnelPool {
      * connection is created. A negative number is returned, if no
      * port-forwarding exists and no new port-forwarding could be created.
      * 
-     * @param hostname
+     * @param sshHost
      *            name of the host to connect to. This can be a DNS name or an
      *            IP address.
+     * @param sshPort
+     *            port number the SSH daemon is listening on. If
+     *            <code>null</code>, the port specified in the configuration
+     *            file is used.
+     * @param sshUser
+     *            username for the SSH connection. If <code>null</code>, the
+     *            username specified in the configuration file is used.
+     * @param targetHost
+     *            the target host for the port forwarding (this name is resolved
+     *            by the SSH daemon on the target side of the tunnel. If
+     *            <code>null</code> the hostname specified in the configuration
+     *            file is used.
+     * @param targetPort
+     *            the target port for the port forwarding. If <code>null</code>
+     *            the port specified in the configuration file is used.
+     * 
      * @return port number that locally exposes the remote service or a negative
      *         number, if the connection could not be established.
      */
-    public int getLocalPortForHost(String hostname) {
-        SSHTunnel tunnel = tunnelForHost.get(hostname);
-        if (tunnel == null) {
-            tunnel = new SSHTunnel();
-            SSHTunnel existingTunnel = tunnelForHost.putIfAbsent(hostname,
-                    tunnel);
+    public int getLocalPortForHost(String sshHost, Integer sshPort,
+            String sshUser, String targetHost, Integer targetPort) {
+        Validate.notNull(sshHost, "The SSH host must not be null.");
+        Validate.isTrue(sshPort == null || (sshPort > 0 && sshPort < 65536),
+                "The SSH port must be between 1 and 65535.");
+        Validate.isTrue(targetPort == null
+                || (targetPort > 0 && targetPort < 65536),
+                "The target port must be between 1 and 65535.");
+        if (sshUser == null) {
+            sshUser = configuration.getSSHUser(sshHost);
+        }
+        if (sshPort == null) {
+            sshPort = configuration.getSSHPort(sshHost);
+        }
+        SSHSessionKey sessionKey = new SSHSessionKey(sshHost, sshPort, sshUser);
+        SSHSessionInfo sessionInfo = tunnelForHost.get(sshHost);
+        if (sessionInfo == null) {
+            sessionInfo = new SSHSessionInfo();
+            SSHSessionInfo existingTunnel = tunnelForHost.putIfAbsent(
+                    sessionKey, sessionInfo);
             if (existingTunnel != null) {
-                tunnel = existingTunnel;
+                sessionInfo = existingTunnel;
             }
         }
-        synchronized (tunnel) {
-            Session session = tunnel.sshSession;
+        synchronized (sessionInfo) {
+            Session session = sessionInfo.sshSession;
             if (session == null || !session.isConnected()) {
-                createSession(hostname, tunnel);
-                if (tunnel.sshSession != null
-                        && tunnel.sshSession.isConnected()) {
-                    return tunnel.localForwardedPort;
+                sessionInfo.sshSession = null;
+                sessionInfo.localPortForPortForwarding.clear();
+                session = createSession(sshHost, sshPort, sshUser);
+            }
+            if (session != null) {
+                if (targetHost == null) {
+                    targetHost = configuration
+                            .getSSHPortForwardingTargetHost(sshHost);
+                }
+                if (targetPort == null) {
+                    targetPort = configuration
+                            .getSSHPortForwardingTargetPort(sshHost);
+                }
+                SSHPortForwardingKey pfKey = new SSHPortForwardingKey(
+                        targetHost, targetPort);
+                Integer localPort = sessionInfo.localPortForPortForwarding
+                        .get(pfKey);
+                if (localPort != null && localPort >= 0) {
+                    return localPort;
                 } else {
-                    return -1;
+                    localPort = createPortForwarding(session, targetHost,
+                            targetPort);
+                    if (localPort != null && localPort >= 0) {
+                        sessionInfo.localPortForPortForwarding.put(pfKey,
+                                localPort);
+                        return localPort;
+                    } else {
+                        return -1;
+                    }
                 }
             } else {
-                return tunnel.localForwardedPort;
+                return -1;
             }
         }
     }
 
-    private void createSession(String hostname, SSHTunnel tunnel) {
-        tunnel.sshSession = null;
-        tunnel.localForwardedPort = -1;
+    private Session createSession(String hostname, int port, String username) {
         Session session;
         try {
-            session = this.jsch.getSession(configuration.getSSHUser(hostname),
-                    configuration.getSSHHost(hostname),
-                    configuration.getSSHPort(hostname));
+            session = this.jsch.getSession(username, hostname, port);
             session.setConfig("StrictHostKeyChecking",
                     configuration.getSSHStrictHostKeyChecking() ? "yes" : "no");
             session.setServerAliveInterval(10000);
@@ -125,32 +252,34 @@ public class SSHTunnelPool {
                 session.setPassword(password);
             }
             session.connect(configuration.getSSHConnectTimeout());
+            return session;
         } catch (JSchException e) {
             System.err
-                    .println("Error while trying to create SSH session for host \""
-                            + hostname + "\": " + e.getMessage());
-            return;
+                    .println("Error while trying to create SSH session for \""
+                            + username + "@" + hostname + "\": "
+                            + e.getMessage());
+            return null;
         }
+    }
+
+    private int createPortForwarding(Session session, String targetHost,
+            int targetPort) {
         int localPort;
         try {
-            localPort = session.setPortForwardingL(0,
-                    configuration.getSSHPortForwardingTargetHost(hostname),
-                    configuration.getSSHPortForwardingTargetPort(hostname));
+            localPort = session.setPortForwardingL(0, targetHost, targetPort);
+            return localPort;
         } catch (JSchException e) {
             System.err
-                    .println("Error while trying to create port-forwarding for SSH host + \""
-                            + hostname
+                    .println("Error while trying to create port-forwarding for \""
+                            + session.getUserName()
+                            + "@"
+                            + session.getHost()
                             + "\" and target address \""
-                            + configuration
-                                    .getSSHPortForwardingTargetHost(hostname)
+                            + targetHost
                             + ":"
-                            + configuration
-                                    .getSSHPortForwardingTargetPort(hostname)
-                            + "\": " + e.getMessage());
-            return;
+                            + targetPort + "\": " + e.getMessage());
+            return -1;
         }
-        tunnel.sshSession = session;
-        tunnel.localForwardedPort = localPort;
     }
 
 }

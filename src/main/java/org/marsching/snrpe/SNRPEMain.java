@@ -183,9 +183,65 @@ public class SNRPEMain {
                         new InputStreamReader(socket.getInputStream()));
                 PrintWriter writer = new PrintWriter(new OutputStreamWriter(
                         socket.getOutputStream(), "UTF-8"));
-                String hostname = reader.readLine();
-                int port = tunnelPool.getLocalPortForHost(hostname);
-                writer.println(port);
+                String requestLine = reader.readLine();
+                String[] lineParts = requestLine.split("\\s+");
+                String sshHost = null;
+                Integer sshPort = null;
+                String sshUser = null;
+                String targetHost = null;
+                Integer targetPort = null;
+                boolean foundIllegalParameters = false;
+                if (requestLine.trim().isEmpty()) {
+                    foundIllegalParameters = true;
+                }
+                if (lineParts.length < 1 || lineParts.length > 5) {
+                    foundIllegalParameters = true;
+                }
+                for (int i = 0; i < lineParts.length; i++) {
+                    if (lineParts[i].equals(":")) {
+                        lineParts[i] = null;
+                    }
+                }
+                if (lineParts.length >= 1) {
+                    sshHost = lineParts[0];
+                    if (sshHost == null) {
+                        foundIllegalParameters = true;
+                    }
+                }
+                if (lineParts.length >= 2 && lineParts[1] != null) {
+                    try {
+                        sshPort = Integer.parseInt(lineParts[1]);
+                    } catch (NumberFormatException e) {
+                        foundIllegalParameters = true;
+                    }
+                    if (sshPort != null && (sshPort < 1 || sshPort > 65535)) {
+                        foundIllegalParameters = true;
+                    }
+                }
+                if (lineParts.length >= 3) {
+                    sshUser = lineParts[2];
+                }
+                if (lineParts.length >= 4) {
+                    targetHost = lineParts[3];
+                }
+                if (lineParts.length >= 5 && lineParts[4] != null) {
+                    try {
+                        targetPort = Integer.parseInt(lineParts[4]);
+                    } catch (NumberFormatException e) {
+                        foundIllegalParameters = true;
+                    }
+                    if (targetPort < 1 || targetPort > 65535) {
+                        foundIllegalParameters = true;
+                    }
+                }
+                int localPort;
+                if (!foundIllegalParameters) {
+                    localPort = tunnelPool.getLocalPortForHost(sshHost,
+                            sshPort, sshUser, targetHost, targetPort);
+                } else {
+                    localPort = -2;
+                }
+                writer.println(localPort);
                 writer.flush();
             } catch (IOException e) {
                 System.err.println("I/O error while handling connection from "

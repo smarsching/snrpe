@@ -7,9 +7,60 @@ SNRPE_PORT="4673"
 
 # DO NOT MODIFY ANYTHING BELOW THIS LINE!
 
-# Check that NRPE plugin is installed and executable
-if ! [ -x "${CHECK_NRPE}" ]; then
-  echo "NRPE plugin (${CHECK_NRPE}) could not be found or is not executable."
+# Utility function for removing white-space at the start and end of strings
+trimString()  {
+  echo -n "${1}" | sed -r -e "s/^[[:space:]]*([^[:space:]].*[^[:space:]]|[^[:space:]])?[[:space:]]*\$/\1/"
+}
+
+# Utility function for checking whether a string starts with another string
+startsWith() {
+  local stringToTest startString
+  stringToTest="${1}"
+  startString="${2}"
+  [ x"${stringToTest:0:${#startString}}" = x"${startString}" ]
+}
+
+# Utility function for extracting RHS of a command-line parameter
+extractValue() {
+  local arg="${1}"
+  echo -n "${arg}" | cut -d = -f 2-
+}
+
+# Print help text
+printHelp() {
+  cat <<EOF
+  
+SNRPE Plugin for Nagios
+Copyright 2013 Sebastian Marsching
+Version: 1.0.0
+License: Apache License 2.0
+
+Usage: check_snrpe (-H |--ssh-host=)<host> [--ssh-port=<port>]
+  [--ssh-user=<username>] [--target-host=<host>] [(-p |--target-port=)<port>]
+  [<extra parameters passed on to check_nrpe>]
+
+Options:
+ -H | --ssh-host      = Hostname of computer to establish SSH connection with
+ --ssh-port           = Port the SSH daemon is listening on
+ --ssh-user           = Username for the SSH authentication
+ --target-host        = Hostname of the target computer on the other side of the
+                        SSH tunnel
+ -p | --target-port   = Port number the NRPE daemon is listening on
+ 
+Note:
+This plugin requires the SNRPE service to be running on the local computer. If
+the connection with the SNRPE service fails or the SNRPE service cannot
+establish an SSH tunnel to the requested target host or port, this is reported
+as a CRITICAL problem.
+The host parameter is mandatory. All other parameters are optional. Parameters
+not recognized by this plugin are passed on to the check_nrpe plugin.
+This plugin needs the Netcat utility to be available as "nc" and needs a version
+of Sed, that supports extended regular expressions.
+EOF
+}
+
+if [ $# -eq 0 ]; then
+  printHelp
   exit 3
 fi
 
@@ -18,17 +69,37 @@ fi
 # supported.
 declare -a args
 args=()
-hostAddress=""
+sshHost=""
+sshPort=""
+sshUser=""
+targetHost=""
+targetPort=""
 nextArgIsHost="false"
+nextArgIsPort="false"
 while [ $# -gt 0 ]; do
   if [ "${nextArgIsHost}" = "true" ]; then
-    hostAddress="${1}"
+    sshHost="${1}"
     nextArgIsHost="false"
+  elif [ "${nextArgIsPort}" = "true" ]; then
+    targetPort="${1}"
+    nextArgIsPort="false"
   else
     if [ x"${1}" = x"-H" ]; then
       nextArgIsHost="true"
     elif [ x"${1}" = x"-p" ]; then
-      echo "Error: The port command-line parameter (-p) is not supported. Please change the port in the SNRPE configuration instead."
+      nextArgIsPort="true"
+    elif startsWith "${1}" "--ssh-host="; then
+      sshHost="`extractValue "${1}"`"
+    elif startsWith "${1}" "--ssh-port="; then
+      sshPort="`extractValue "${1}"`"
+    elif startsWith "${1}" "--ssh-user="; then
+      sshUser="`extractValue "${1}"`"
+    elif startsWith "${1}" "--target-host="; then
+      targetHost="`extractValue "${1}"`"
+    elif startsWith "${1}" "--target-port="; then
+      targetPort="`extractValue "${1}"`"
+    elif [ x"${1}" = x"-h" ] || [ x"${1}" = x"--help" ]; then
+      printHelp
       exit 3
     else
       args=(${args[@]} "${1}")
@@ -38,21 +109,27 @@ while [ $# -gt 0 ]; do
 done
 
 # Check that the -H parameter has been specified.
-if [ x"${hostAddress}" = x ]; then
+if [ x"`trimString "${sshHost}"`" = x ]; then
   echo "Error: The host parameter (-H) must be specified."
   exit 3
 fi
 
-# Utility function for removing white-space at the start and end of strings
-trimString()  {
-  local string=$1
-  string="${string#"${string%%[![:space:]]*}"}"
-  string="${string%"${string##*[![:space:]]}"}"   # remove trailing whitespace characters
-  echo -n "$string"
-}
+# Set all empty parameters to ":" before sending the request
+if [ x"`trimString "${sshPort}"`" = x ]; then
+  sshPort=":"
+fi
+if [ x"`trimString "${sshUser}"`" = x ]; then
+  sshUser=":"
+fi
+if [ x"`trimString "${targetHost}"`" = x ]; then
+  targetHost=":"
+fi
+if [ x"`trimString "${targetPort}"`" = x ]; then
+  targetPort=":"
+fi
 
 # Query SNRPE service for the port number that is forwarded to the target host
-port="`echo "${hostAddress}" | nc "${SNRPE_HOST}" "${SNRPE_PORT}"`"
+port="`echo "${sshHost} ${sshPort} ${sshUser} ${targetHost} ${targetPort}" | nc 127.0.0.1 "${SNRPE_PORT}"`"
 port="`trimString "${port}"`"
 if [ x"${port}" = x"" ]; then
   echo "Error: Could not get local port for NRPE connection. Maybe the SNRPE service is not running." >&2
@@ -61,6 +138,12 @@ fi
 if [ "${port}" -lt 0 ]; then
   echo "Error: Could not get local port for NRPE connection. Maybe the SSH tunnel could not be established." >&2
   exit 2
+fi
+
+# Check that NRPE plugin is installed and executable
+if ! [ -x "${CHECK_NRPE}" ]; then
+  echo "NRPE plugin (${CHECK_NRPE}) could not be found or is not executable."
+  exit 3
 fi
 
 # Run check_nrpe and have it connect to the port forwarded through the SSH
