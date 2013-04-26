@@ -33,7 +33,7 @@ printHelp() {
 SNRPE Plugin for Nagios
 Copyright 2013 Sebastian Marsching
 Version: 1.0.0
-License: Apache License 2.0
+License: Apache License, Version 2.0
 
 Usage: check_snrpe (-H |--ssh-host=)<host> [--ssh-port=<port>]
   [--ssh-user=<username>] [--target-host=<host>] [(-p |--target-port=)<port>]
