@@ -58,7 +58,7 @@
            <archive>
              <manifest>
                <addClasspath>true</addClasspath>
-               <classpathPrefix>lib/</classpathPrefix>
+               <classpathPrefix></classpathPrefix>
                <mainClass>org.marsching.snrpe.SNRPEMain</mainClass>
              </manifest>
            </archive>
