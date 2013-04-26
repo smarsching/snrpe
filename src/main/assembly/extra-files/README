@@ -5,6 +5,14 @@ This is desirable because the SSL support built into NRPE is insecure and broken
 by design.
 
 
+Prerequisites:
+
+- Java JRE 6 (or newer) on the Nagios host (OpenJDK / OpenJRE should be fine)
+- NRPE Nagios plugin on the Nagios host
+- Bash shell, Sed and Netcat command-line utilities on the Nagios host 
+- SSH daemon supporting port-forwardings and NRPE daemon on the target host
+
+
 Installation:
 
 The file nagios/check_snrpe is a shell script that can be called from Nagios.
@@ -27,7 +35,8 @@ In your Nagios configuration, you run the check_snrpe command at every instance
 where you would usually run the check_nrpe command. The check_snrpe command
 takes care of establishing the tunnel (provided that the SNRPE service is
 running) and calling check_nrpe with the correct parameters to connect through
-the tunnel.
+the tunnel. Run "check_snrpe --help" to a get a list of all support command-line
+arguments.
 
 
 Configuration:
