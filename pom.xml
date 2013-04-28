@@ -67,6 +67,14 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-assembly-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>assembly</goal>
+            </goals>
+          </execution>
+        </executions>
         <configuration>
           <descriptors>
             <descriptor>src/main/assembly/bundle.xml</descriptor>
@@ -74,6 +82,87 @@
           <descriptorRefs>
             <descriptorRef>src</descriptorRef>
           </descriptorRefs>
+        </configuration>
+      </plugin>
+      <plugin>
+        <artifactId>jdeb</artifactId>
+        <groupId>org.vafer</groupId>
+        <version>1.0.1</version>
+<!--
+        <executions>
+          <execution>
+            <phase>package</phase>
+              <goals>
+                <goal>jdeb</goal>
+              </goals>
+          </execution>
+        </executions>
+-->
+        <configuration>
+          <deb>${project.build.directory}/nagios-snrpe-plugin_${version}_all.deb</deb>
+          <verbose>true</verbose>
+          <dataSet>
+            <data>
+              <src>${project.build.directory}/${project.build.finalName}-bundle/${project.build.finalName}/nagios/check_snrpe</src>
+              <type>file</type>
+              <mapper>
+                <type>perm</type>
+                <filemode>755</filemode>
+                <prefix>/usr/lib/nagios/plugins</prefix>
+              </mapper>
+            </data>
+            <data>
+              <src>${project.build.directory}/${project.build.finalName}-bundle/${project.build.finalName}/lib/${project.build.finalName}.jar</src>
+              <type>file</type>
+              <mapper>
+                <type>perm</type>
+                <filemode>755</filemode>
+                <prefix>/usr/lib/snrpe</prefix>
+              </mapper>
+            </data>
+            <data>
+              <src>${project.build.directory}/${project.build.finalName}-bundle/${project.build.finalName}/lib</src>
+              <type>directory</type>
+              <excludes>/${project.build.finalName}.jar</excludes>
+              <mapper>
+                <type>perm</type>
+                <prefix>/usr/lib/snrpe</prefix>
+              </mapper>
+            </data>
+            <data>
+              <src>${project.build.directory}/${project.build.finalName}-bundle/${project.build.finalName}</src>
+              <type>directory</type>
+              <includes>LICENSE,README</includes>
+              <mapper>
+                <type>perm</type>
+                <prefix>/usr/share/doc/nagios-snrpe-plugin</prefix>
+              </mapper>
+            </data>
+            <data>
+              <src>${project.build.directory}/${project.build.finalName}-bundle/${project.build.finalName}/upstart/snrpe.conf</src>
+              <type>file</type>
+              <mapper>
+                <type>perm</type>
+                <prefix>/etc/init</prefix>
+              </mapper>
+            </data>
+            <data>
+              <src>${project.build.directory}/${project.build.finalName}-bundle/${project.build.finalName}/nagios/check_snrpe.cfg</src>
+              <type>file</type>
+              <mapper>
+                <type>perm</type>
+                <prefix>/etc/nagios-plugins/config</prefix>
+              </mapper>
+            </data>
+            <data>
+              <src>${project.build.directory}/${project.build.finalName}-bundle/${project.build.finalName}/etc/snrpe.conf</src>
+              <type>file</type>
+              <mapper>
+                <type>perm</type>
+                <prefix>/etc/snrpe</prefix>
+              </mapper>
+            </data>
+          </dataSet>
         </configuration>
       </plugin>
     </plugins>

@@ -1,0 +1,3 @@
+/etc/init/snrpe.conf
+/etc/nagios-plugins/conf/check_snrpe.cfg
+/etc/snrpe/snrpe.conf

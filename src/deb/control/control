@@ -1,0 +1,16 @@
+Package: nagios-snrpe-plugin
+Version: [[version]]
+Section: net
+Priority: optional
+Architecture: all
+Depends: java6-runtime-headless, nagios-nrpe-plugin, upstart-job
+Maintainer: Sebastian Marsching <sebastian@marsching.com>
+Description: Secure Nagios Remote Executor Plugin
+ Nagios is a host/service/network monitoring and management system.
+ .
+ The purpose of this addon is to allow you to execute Nagios plugins on a
+ remote host in a secure way.
+ .
+ This plugin runs on the Nagios host and works as a wrapper around
+ nagios-nrpe-plugin. The host being monitored only needs a running SSH server
+ and the nagios-nrpe-server listening on the loopback interface.
