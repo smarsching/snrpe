@@ -124,13 +124,13 @@
             <data>
               <type>link</type>
               <linkName>/usr/lib/snrpe/${project.artifactId}.jar</linkName>
-              <linkTarget>/usr/lib/snrpe/${project.build.finalName}.jar</linkTarget>
+              <linkTarget>${project.build.finalName}.jar</linkTarget>
               <symlink>true</symlink>
             </data>
             <data>
               <src>${project.build.directory}/${project.build.finalName}-bundle/${project.build.finalName}/lib</src>
               <type>directory</type>
-              <excludes>/${project.build.finalName}.jar</excludes>
+              <excludes>${project.artifactId}.jar</excludes>
               <mapper>
                 <type>perm</type>
                 <prefix>/usr/lib/snrpe</prefix>
