@@ -191,7 +191,7 @@ public class SSHTunnelPool {
             sshPort = configuration.getSSHPort(sshHost);
         }
         SSHSessionKey sessionKey = new SSHSessionKey(sshHost, sshPort, sshUser);
-        SSHSessionInfo sessionInfo = tunnelForHost.get(sshHost);
+        SSHSessionInfo sessionInfo = tunnelForHost.get(sessionKey);
         if (sessionInfo == null) {
             sessionInfo = new SSHSessionInfo();
             SSHSessionInfo existingTunnel = tunnelForHost.putIfAbsent(
@@ -201,13 +201,14 @@ public class SSHTunnelPool {
             }
         }
         synchronized (sessionInfo) {
-            Session session = sessionInfo.sshSession;
-            if (session == null || !session.isConnected()) {
+            if (sessionInfo.sshSession == null
+                    || !sessionInfo.sshSession.isConnected()) {
                 sessionInfo.sshSession = null;
                 sessionInfo.localPortForPortForwarding.clear();
-                session = createSession(sshHost, sshPort, sshUser);
+                sessionInfo.sshSession = createSession(sshHost, sshPort,
+                        sshUser);
             }
-            if (session != null) {
+            if (sessionInfo.sshSession != null) {
                 if (targetHost == null) {
                     targetHost = configuration
                             .getSSHPortForwardingTargetHost(sshHost);
@@ -223,8 +224,8 @@ public class SSHTunnelPool {
                 if (localPort != null && localPort >= 0) {
                     return localPort;
                 } else {
-                    localPort = createPortForwarding(session, targetHost,
-                            targetPort);
+                    localPort = createPortForwarding(sessionInfo.sshSession,
+                            targetHost, targetPort);
                     if (localPort != null && localPort >= 0) {
                         sessionInfo.localPortForPortForwarding.put(pfKey,
                                 localPort);
@@ -264,10 +265,8 @@ public class SSHTunnelPool {
 
     private int createPortForwarding(Session session, String targetHost,
             int targetPort) {
-        int localPort;
         try {
-            localPort = session.setPortForwardingL(0, targetHost, targetPort);
-            return localPort;
+            return session.setPortForwardingL(0, targetHost, targetPort);
         } catch (JSchException e) {
             System.err
                     .println("Error while trying to create port-forwarding for \""
