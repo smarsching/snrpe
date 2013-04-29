@@ -112,13 +112,20 @@
               </mapper>
             </data>
             <data>
-              <src>${project.build.directory}/${project.build.finalName}-bundle/${project.build.finalName}/lib/${project.build.finalName}.jar</src>
+              <src>${project.build.directory}/${project.build.finalName}-bundle/${project.build.finalName}/lib/${project.artifactId}.jar</src>
+              <dst>${project.build.finalName}.jar</dst>
               <type>file</type>
               <mapper>
                 <type>perm</type>
                 <filemode>755</filemode>
                 <prefix>/usr/lib/snrpe</prefix>
               </mapper>
+            </data>
+            <data>
+              <type>link</type>
+              <linkName>/usr/lib/snrpe/${project.artifactId}.jar</linkName>
+              <linkTarget>/usr/lib/snrpe/${project.build.finalName}.jar</linkTarget>
+              <symlink>true</symlink>
             </data>
             <data>
               <src>${project.build.directory}/${project.build.finalName}-bundle/${project.build.finalName}/lib</src>
